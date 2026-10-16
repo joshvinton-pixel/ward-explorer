@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ward coverage explorer — Tanzania secondary schools</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#EEF2EF; --surface:#FFFFFF; --ink:#1D2B2A; --muted:#5A6866; --line:#D3DBD6;
+  --served:#2F6F68; --served-soft:#D6E7E3; --unserved:#B97A06; --unserved-soft:#F4E4BF; --focus:#3A4F8C;
+  color-scheme:light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121918; --surface:#1B2423; --ink:#E4EBE9; --muted:#9AA9A6; --line:#2D3937;
+    --served:#62B5AA; --served-soft:#1F3B37; --unserved:#E6AE45; --unserved-soft:#43351A; --focus:#9AAEEB;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121918; --surface:#1B2423; --ink:#E4EBE9; --muted:#9AA9A6; --line:#2D3937;
+  --served:#62B5AA; --served-soft:#1F3B37; --unserved:#E6AE45; --unserved-soft:#43351A; --focus:#9AAEEB;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 "IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}
+h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",system-ui,sans-serif;font-weight:700;margin:0;letter-spacing:-0.01em}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.wrap{display:grid;grid-template-columns:300px minmax(0,1fr);gap:0;min-height:100vh}
+aside{background:var(--surface);border-right:1px solid var(--line);padding:24px 22px;position:sticky;top:0;align-self:start;max-height:100vh;overflow:auto}
+main{padding:28px 32px 56px;max-width:1180px}
+.brand{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:19px;line-height:1.2;margin-bottom:4px}
+.sub{color:var(--muted);font-size:13px;margin:0 0 22px}
+.ctl{margin-bottom:20px}
+.ctl > label,.ctl > .lbl{display:block;font-weight:600;font-size:13.5px;margin-bottom:6px}
+.hint{color:var(--muted);font-size:12.5px;margin-top:4px;line-height:1.4}
+.lens{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.lens button{border:1px solid var(--line);background:transparent;border-radius:8px;padding:9px 8px;cursor:pointer;text-align:left;font-weight:500;font-size:14px}
+.lens button[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.val{font-weight:600;font-size:13.5px}
+input[type=range]{width:100%;accent-color:var(--served)}
+.checks{display:flex;flex-wrap:wrap;gap:6px 14px}
+.checks label{display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer}
+select{width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface)}
+.group{border-top:1px solid var(--line);padding-top:16px;margin-top:4px}
+.group h3{font-size:14px;margin-bottom:12px;color:var(--muted);font-family:"IBM Plex Sans",sans-serif;font-weight:600}
+.hero{margin:6px 0 10px}
+.hero h1{font-size:clamp(26px,3.4vw,40px);line-height:1.12;max-width:26ch}
+.hero p{color:var(--muted);max-width:68ch;margin:12px 0 0;font-size:15.5px}
+.lensnote{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--unserved);border-radius:6px;padding:12px 16px;margin:20px 0 28px;max-width:78ch;font-size:14.5px}
+.stats{display:flex;flex-wrap:wrap;gap:10px 36px;margin:0 0 30px}
+.stats div{min-width:140px}
+.stats b{display:block;font-family:"Bricolage Grotesque",sans-serif;font-size:24px;line-height:1.1}
+.stats span{color:var(--muted);font-size:13px}
+.panels{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:24px;margin-bottom:34px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px 18px 14px}
+.panel h2{font-size:18px;margin-bottom:4px}
+.panel .hint{margin:0 0 12px}
+.chart{width:100%;overflow-x:auto}
+svg text{fill:var(--ink);font-family:"IBM Plex Sans",sans-serif}
+.bar-u{fill:var(--unserved)} .bar-s{fill:var(--served-soft)} .bar-sel{stroke:var(--ink);stroke-width:1.5}
+.reg-row{cursor:pointer}
+.reg-row:hover .bar-s{fill:var(--served)}
+.tablehead{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:end;justify-content:space-between;margin-bottom:10px}
+.tablehead h2{font-size:20px}
+.search{padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);min-width:220px}
+.tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:860px}
+th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}
+th{font-weight:600;color:var(--muted);background:var(--surface);cursor:pointer;user-select:none;position:sticky;top:0}
+th[aria-sort="descending"]::after{content:" ▾"} th[aria-sort="ascending"]::after{content:" ▴"}
+tr:last-child td{border-bottom:0}
+.vsi{display:inline-block;margin-left:6px;padding:0 6px;border-radius:4px;background:var(--served-soft);color:var(--served);font-size:11.5px;font-weight:600}
+.meter{display:inline-block;width:54px;height:7px;background:var(--served-soft);border-radius:4px;vertical-align:middle;margin-right:6px;overflow:hidden}
+.meter i{display:block;height:100%;background:var(--unserved)}
+.status{padding:40px 0;max-width:64ch}
+.status h1{font-size:28px;margin-bottom:10px}
+.btn{border:1px solid var(--ink);background:var(--ink);color:var(--surface);border-radius:8px;padding:9px 14px;cursor:pointer;font-weight:600}
+.btn.ghost{background:transparent;color:var(--ink)}
+.filebox{margin-top:18px;padding:14px;border:1px dashed var(--line);border-radius:8px;font-size:14px}
+.foot{color:var(--muted);font-size:13px;margin-top:30px;max-width:80ch}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--unserved-soft);border-radius:999px;padding:3px 10px;font-size:13px;margin-left:8px}
+.chip button{border:0;background:transparent;cursor:pointer;padding:0;font-weight:700}
+.hidden{display:none !important}
+@media (max-width:900px){
+  .wrap{grid-template-columns:1fr}
+  aside{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--line)}
+  main{padding:22px 18px 48px}
+  .panels{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion: reduce){*{transition:none !important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <aside id="controls" aria-label="Model settings">
+    <div class="brand">Ward coverage explorer</div>
+    <p class="sub">Tanzania mainland secondary schools, 2025, against 2022 census wards.</p>
+
+    <div class="ctl">
+      <span class="lbl" id="lensLbl">Lens</span>
+      <div class="lens" role="group" aria-labelledby="lensLbl">
+        <button data-lens="distance" aria-pressed="true">Distance</button>
+        <button data-lens="capacity" aria-pressed="false">Capacity</button>
+        <button data-lens="enrollment" aria-pressed="false">Enrollment</button>
+        <button data-lens="combined" aria-pressed="false">Combined</button>
+      </div>
+    </div>
+
+    <div class="ctl">
+      <span class="lbl">Ward types</span>
+      <div class="checks">
+        <label><input type="checkbox" data-type="Rural" checked> Rural</label>
+        <label><input type="checkbox" data-type="Mixed"> Mixed</label>
+        <label><input type="checkbox" data-type="Urban"> Urban</label>
+      </div>
+    </div>
+
+    <div class="ctl">
+      <label for="region">Region</label>
+      <select id="region"><option value="">All mainland regions</option></select>
+    </div>
+
+    <div class="group">
+      <h3>Distance assumptions</h3>
+      <div class="ctl">
+        <div class="row"><label for="radius">Walking catchment</label><span class="val" id="radiusVal"></span></div>
+        <input type="range" id="radius" min="2" max="10" step="0.5" value="5">
+        <div class="hint" id="radiusHint"></div>
+      </div>
+    </div>
+
+    <div class="group">
+      <h3>Capacity assumptions</h3>
+      <div class="ctl">
+        <div class="row"><label for="seats">Seats per school</label><span class="val" id="seatsVal"></span></div>
+        <input type="range" id="seats" min="200" max="1200" step="50" value="500">
+        <div class="hint">About 360 is a two-stream school (Forms 1–4, 45 per class); 720 is four streams.</div>
+      </div>
+      <div class="ctl">
+        <div class="row"><label for="share">Secondary-age share</label><span class="val" id="shareVal"></span></div>
+        <input type="range" id="share" min="8" max="16" step="0.5" value="13">
+        <div class="hint">Share of residents aged roughly 14–19 (Forms 1–6). Use about 9% for Forms 1–4 only.</div>
+      </div>
+      <div class="ctl">
+        <label style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="checkbox" id="project" checked> Grow 2022 population to 2025 (3% a year)</label>
+      </div>
+    </div>
+
+    <div class="group">
+      <h3>Enrollment assumptions</h3>
+      <div class="ctl">
+        <div class="row"><label for="target">Benchmark enrollment rate</label><span class="val" id="targetVal"></span></div>
+        <input type="range" id="target" min="20" max="100" step="1" value="60">
+        <div class="hint" id="targetHint"></div>
+      </div>
+      <div class="ctl">
+        <label style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="checkbox" id="pool"> Pool enrollment by council</label>
+        <div class="hint">Smooths out students who cross ward lines to attend school.</div>
+      </div>
+    </div>
+  </aside>
+
+  <main id="main">
+    <section class="status" id="status">
+      <h1>Loading ward data</h1>
+      <p id="statusMsg">Reading the latest ward data.</p>
+      <div id="statusActions"></div>
+      <div class="filebox" id="filebox">
+        <strong>Or load a CSV.</strong> In the sheet, open the “Wards (citypopulation)” tab, choose File → Download → Comma-separated values, then pick that file here.
+        <div style="margin-top:8px"><input type="file" id="csv" accept=".csv,text/csv"></div>
+      </div>
+    </section>
+
+    <div id="app" class="hidden">
+      <section class="hero">
+        <h1 id="headline"></h1>
+        <p id="subline"></p>
+      </section>
+      <div class="lensnote" id="lensnote"></div>
+      <div class="stats" id="stats"></div>
+
+      <div class="panels">
+        <section class="panel">
+          <h2>By region</h2>
+          <p class="hint">Unserved people under the current lens. Select a region to filter everything else.</p>
+          <div class="chart" id="regionChart"></div>
+        </section>
+        <section class="panel">
+          <h2>Does distance show up in enrollment?</h2>
+          <p class="hint">Median enrollment rate of wards in scope, grouped by land area per school. The marker shows the area one school covers at the current catchment.</p>
+          <div class="chart" id="calChart"></div>
+          <p class="hint" id="calNote" style="margin-top:8px"></p>
+        </section>
+      </div>
+
+      <section>
+        <div class="tablehead">
+          <h2>Wards<span id="regionChip"></span></h2>
+          <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+            <label style="display:flex;gap:6px;align-items:center;font-size:14px"><input type="checkbox" id="vsiOnly"> VSI wards only</label>
+            <input type="search" class="search" id="q" placeholder="Search ward or council" aria-label="Search ward or council">
+          </div>
+        </div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr id="thead"></tr></thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+        <p class="hint" id="tableNote"></p>
+      </section>
+
+      <p class="foot">Population and ward areas: citypopulation.de (2022 census; areas from mapping data). Schools and enrollment: 2025 Consolidated Secondary Education Data. Enrollment is counted where the school is, not where students live, so busy wards can look over-served and their neighbours under-served. Treat every figure here as a rough estimate.</p>
+    </div>
+  </main>
+</div>
+
+<script>
+// Published CSV of the "Wards (citypopulation)" tab. Edits to the sheet show up here within a few minutes.
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ6VyM6ysriU2cRTYNlHJP92pWH-BdIFnP1Fw3pYK2HgT7biPQKuGQVp-24BBxmxcDbWTcxPQcqMGqv/pub?gid=600300992&single=true&output=csv";
+const HEX = 3 * Math.sqrt(3) / 2; // hexagonal packing: area covered per school = 2.598 r²
+
+const LENSES = {
+  distance: {
+    name: "distance",
+    title: "Distance",
+    note: "Each school covers a walking catchment. Whatever part of a ward falls outside every catchment counts as unserved, assuming people are spread evenly across the ward. In reality people cluster in villages near roads and schools, so this is an upper bound."
+  },
+  capacity: {
+    name: "capacity",
+    title: "Capacity",
+    note: "Compares secondary-age residents with the seats the ward’s schools could hold. It ignores distance, so it understates need in big, sparse wards and is the constraint that bites in crowded ones."
+  },
+  enrollment: {
+    name: "enrollment",
+    title: "Enrollment",
+    note: "Uses what actually happened: 2025 enrollment against the secondary-age population. Wards below the benchmark rate count the shortfall as unserved. Students crossing ward lines blur this, so try pooling by council."
+  },
+  combined: {
+    name: "combined",
+    title: "Combined",
+    note: "Takes whichever of distance or capacity is worse in each ward: a family needs a school that is both close enough and has room. Enrollment is left out so it can act as a reality check on this estimate."
+  }
+};
+
+const state = {
+  lens: "distance", types: new Set(["Rural"]), region: "", radius: 5, seats: 500,
+  share: 13, project: true, target: 60, pool: false, vsiOnly: false, q: "",
+  sort: { key: "unserved", dir: -1 }
+};
+let WARDS = [];
+let targetTouched = false, targetInit = false;
+
+/* ---------- formatting ---------- */
+const fmt = n => {
+  if (!isFinite(n)) return "—";
+  const a = Math.abs(n);
+  if (a >= 1e6) return (n / 1e6).toFixed(a >= 1e7 ? 1 : 2).replace(/\.?0+$/, "") + "M";
+  if (a >= 1e4) return Math.round(n / 1e3) + "k";
+  return Math.round(n).toLocaleString("en-US");
+};
+const pct = (x, d = 0) => isFinite(x) ? (x * 100).toFixed(d) + "%" : "—";
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const num = s => { const v = parseFloat(String(s ?? "").replace(/,/g, "")); return isFinite(v) ? v : 0; };
+
+/* ---------- data loading ---------- */
+function ingest(values) {
+  const rows = values.slice(1);
+  WARDS = [];
+  for (const r of rows) {
+    const status = r[13] || "";
+    const pop = num(r[4]);
+    if (!r[0] || !pop || /^Zanzibar|^Protected/.test(status)) continue;
+    WARDS.push({
+      region: r[0], council: r[7] || r[1], ward: r[2], type: r[3] || "Rural",
+      pop, area: num(r[5]), gov: num(r[9]), nongov: num(r[10]), schools: num(r[11]),
+      enrolled: num(r[12]), status, vsi: r[16] || ""
+    });
+  }
+  if (!WARDS.length) throw new Error("No mainland wards found. Check that the Wards tab still has its original columns.");
+  const regions = [...new Set(WARDS.map(w => w.region))].sort();
+  document.getElementById("region").insertAdjacentHTML("beforeend", regions.map(r => `<option>${esc(r)}</option>`).join(""));
+  document.getElementById("status").classList.add("hidden");
+  document.getElementById("app").classList.remove("hidden");
+  render();
+}
+
+function showStatus(title, msg, actionsHtml = "") {
+  const s = document.getElementById("status");
+  s.classList.remove("hidden");
+  s.querySelector("h1").textContent = title;
+  document.getElementById("statusMsg").textContent = msg;
+  document.getElementById("statusActions").innerHTML = actionsHtml;
+}
+
+async function loadFromSheet() {
+  showStatus("Loading ward data", "Reading the latest ward data. This can take a few seconds.");
+  try {
+    const res = await fetch(CSV_URL, { cache: "no-store" });
+    if (!res.ok) throw new Error("The data link answered with an error (" + res.status + "). Check that the Wards tab is still published to the web.");
+    const text = await res.text();
+    if (!/^Region,/.test(text.trim())) throw new Error("The data link didn’t return the Wards table. Check that the published tab is “Wards (citypopulation)” and the format is CSV.");
+    ingest(parseCSV(text));
+  } catch (e) {
+    showStatus("The data didn’t load", (e && e.message && !/Failed to fetch|NetworkError|Load failed/i.test(e.message)) ? e.message : "The page couldn’t reach the published sheet. Check your connection and reload.", `<button class="btn" id="retryBtn">Try again</button>`);
+    const b = document.getElementById("retryBtn");
+    if (b) b.onclick = () => loadFromSheet();
+  }
+}
+
+function parseCSV(text) {
+  const rows = []; let row = [], cur = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+    else if (c === '"') q = true;
+    else if (c === ",") { row.push(cur); cur = ""; }
+    else if (c === "\n") { row.push(cur.replace(/\r$/, "")); rows.push(row); row = []; cur = ""; }
+    else cur += c;
+  }
+  if (cur || row.length) { row.push(cur); rows.push(row); }
+  return rows;
+}
+document.getElementById("csv").addEventListener("change", async ev => {
+  const f = ev.target.files[0]; if (!f) return;
+  try { ingest(parseCSV(await f.text())); }
+  catch (e) { showStatus("That file didn’t work", e.message || "Use the CSV download of the “Wards (citypopulation)” tab."); }
+});
+
+/* ---------- model ---------- */
+function model() {
+  const g = state.project ? Math.pow(1.03, 3) : 1;
+  const s = state.share / 100, T = state.target / 100;
+  const Ac = HEX * state.radius * state.radius;
+  // council pools use every populated ward in the council (all types), since students cross ward lines
+  const pools = {};
+  for (const w of WARDS) {
+    const k = w.region + "|" + w.council;
+    const p = pools[k] || (pools[k] = { e: 0, d: 0 });
+    p.e += w.enrolled; p.d += w.pop * g * s;
+  }
+  const out = [];
+  for (const w of WARDS) {
+    const P = w.pop * g, demand = P * s, S = w.schools;
+    const distShare = w.area > 0 ? Math.max(0, 1 - Math.min(w.area, S * Ac) / w.area) : 0;
+    const needDist = Math.max(1, Math.ceil(w.area / Ac));
+    const capShare = demand > 0 ? Math.max(0, 1 - (S * state.seats) / demand) : 0;
+    const needCap = Math.max(1, Math.ceil(demand / state.seats));
+    const rate = demand > 0 ? w.enrolled / demand : 0;
+    const pool = pools[w.region + "|" + w.council];
+    const rateUsed = state.pool ? (pool.d > 0 ? pool.e / pool.d : 0) : rate;
+    const enrShare = Math.max(0, 1 - rateUsed / T);
+    const combShare = Math.max(distShare, capShare);
+    const shares = { distance: distShare, capacity: capShare, enrollment: enrShare, combined: combShare };
+    const need = { distance: needDist, capacity: needCap, combined: Math.max(needDist, needCap), enrollment: NaN };
+    out.push({ ...w, P, demand, rate, distShare, capShare, enrShare, combShare, shares, need,
+      kmPerSchool: S > 0 ? w.area / S : Infinity });
+  }
+  return { rows: out, Ac };
+}
+
+function inScope(r, ignoreRegion = false) {
+  return state.types.has(r.type) && (ignoreRegion || !state.region || r.region === state.region);
+}
+
+/* ---------- render ---------- */
+function render() {
+  const { rows, Ac } = model();
+  const L = state.lens;
+  const scopeAll = rows.filter(r => inScope(r, true));
+  const scope = rows.filter(r => inScope(r));
+
+  // controls text
+  document.getElementById("radiusVal").textContent = state.radius + " km";
+  document.getElementById("radiusHint").textContent = `One school covers about ${Math.round(Ac)} km² at this radius (roughly ${Math.round(state.radius * 12)} minutes’ walk each way at 5 km/h).`;
+  document.getElementById("seatsVal").textContent = state.seats;
+  document.getElementById("shareVal").textContent = state.share + "%";
+
+  // benchmark: set once from what well-served wards in scope achieve
+  const rates = scope.filter(r => r.schools > 0 && r.demand > 0).map(r => Math.min(r.rate, 2)).sort((a, b) => a - b);
+  const q = p => rates.length ? rates[Math.floor(p * (rates.length - 1))] : NaN;
+  const totE = scope.reduce((a, r) => a + r.enrolled, 0), totD = scope.reduce((a, r) => a + r.demand, 0);
+  if (!targetInit && rates.length) {
+    targetInit = true;
+    state.target = Math.min(100, Math.max(20, Math.round(q(0.75) * 100)));
+    document.getElementById("target").value = state.target;
+    return render();
+  }
+  document.getElementById("targetVal").textContent = state.target + "%";
+  document.getElementById("targetHint").textContent = `In scope, overall enrollment is ${pct(totD ? totE / totD : NaN)} of secondary-age residents. The median ward is at ${pct(q(0.5))}; a quarter of wards reach ${pct(q(0.75))} or more.`;
+
+  // totals
+  const sum = (arr, f) => arr.reduce((a, r) => a + f(r), 0);
+  const P = sum(scope, r => r.P);
+  const un = l => sum(scope, r => r.P * r.shares[l]);
+  const U = un(L);
+  const affected = scope.filter(r => r.shares[L] >= 0.25).length;
+  const gap = L === "enrollment" ? NaN : sum(scope, r => Math.max(0, r.need[L] - r.schools));
+  const zero = scope.filter(r => r.schools === 0).length;
+  const types = [...state.types].map(t => t.toLowerCase());
+  const typeTxt = types.length === 3 ? "all wards" : types.join(" and ") + " wards";
+  const where = state.region ? ` in ${state.region}` : " on the mainland";
+
+  document.getElementById("headline").textContent =
+    `About ${fmt(U)} of the ${fmt(P)} people in ${typeTxt}${where} are not served under the ${LENSES[L].title.toLowerCase()} lens.`;
+  const ests = ["distance", "capacity", "enrollment"].map(l => ({ l, v: un(l) })).sort((a, b) => a.v - b.v);
+  document.getElementById("subline").textContent =
+    `That’s ${pct(P ? U / P : NaN)} of residents. Across the three lenses the estimate runs from ${fmt(ests[0].v)} (${ests[0].l}) to ${fmt(ests[2].v)} (${ests[2].l}), so the honest answer is a range rather than one number.`;
+  document.getElementById("lensnote").textContent = LENSES[L].note;
+
+  document.getElementById("stats").innerHTML = [
+    [scope.length.toLocaleString("en-US"), "wards in scope"],
+    [zero.toLocaleString("en-US"), "with no secondary school"],
+    [affected.toLocaleString("en-US"), "with a quarter or more unserved"],
+    [isFinite(gap) ? fmt(gap) : "—", L === "enrollment" ? "extra schools (not estimated by this lens)" : "extra schools implied"]
+  ].map(([b, s]) => `<div><b>${b}</b><span>${s}</span></div>`).join("");
+
+  renderRegions(scopeAll, L);
+  renderCalibration(scope, Ac);
+  renderTable(scope, L);
+}
+
+function renderRegions(rows, L) {
+  const by = {};
+  for (const r of rows) {
+    const o = by[r.region] || (by[r.region] = { P: 0, U: 0 });
+    o.P += r.P; o.U += r.P * r.shares[L];
+  }
+  const data = Object.entries(by).map(([k, v]) => ({ k, ...v })).sort((a, b) => b.U - a.U);
+  const max = Math.max(...data.map(d => d.P), 1);
+  const W = 560, rowH = 22, left = 112, right = 92, H = data.length * rowH + 6;
+  const bw = W - left - right;
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Unserved people by region">`;
+  data.forEach((d, i) => {
+    const y = i * rowH + 3, sel = state.region === d.k;
+    s += `<g class="reg-row" data-region="${esc(d.k)}" tabindex="0" role="button" aria-label="${esc(d.k)}: ${fmt(d.U)} unserved of ${fmt(d.P)}">
+      <text x="${left - 8}" y="${y + 14}" text-anchor="end" font-size="12.5" ${sel ? 'font-weight="600"' : ""}>${esc(d.k)}</text>
+      <rect class="bar-s${sel ? " bar-sel" : ""}" x="${left}" y="${y + 3}" width="${(d.P / max) * bw}" height="${rowH - 8}" rx="2"></rect>
+      <rect class="bar-u" x="${left}" y="${y + 3}" width="${(d.U / max) * bw}" height="${rowH - 8}" rx="2"></rect>
+      <text x="${left + (d.P / max) * bw + 6}" y="${y + 14}" font-size="12">${fmt(d.U)} · ${pct(d.P ? d.U / d.P : 0)}</text>
+    </g>`;
+  });
+  s += `</svg>`;
+  const el = document.getElementById("regionChart");
+  el.innerHTML = s;
+  el.querySelectorAll(".reg-row").forEach(g => {
+    const pick = () => { state.region = state.region === g.dataset.region ? "" : g.dataset.region; document.getElementById("region").value = state.region; render(); };
+    g.addEventListener("click", pick);
+    g.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
+  });
+}
+
+function renderCalibration(rows, Ac) {
+  const bins = [[0, 25], [25, 50], [50, 100], [100, 200], [200, 400], [400, Infinity]];
+  const data = bins.map(([a, b]) => {
+    const r = rows.filter(x => x.schools > 0 && x.demand > 0 && x.kmPerSchool >= a && x.kmPerSchool < b).map(x => Math.min(x.rate, 2)).sort((p, q) => p - q);
+    return { a, b, n: r.length, med: r.length ? r[Math.floor((r.length - 1) / 2)] : NaN };
+  });
+  const W = 480, H = 230, l = 44, rgt = 12, top = 16, bot = 46;
+  const maxV = Math.max(0.2, ...data.map(d => d.med || 0)) * 1.15;
+  const cw = (W - l - rgt) / data.length;
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Median enrollment rate by area per school">`;
+  for (let t = 0; t <= 4; t++) {
+    const v = maxV * t / 4, y = top + (H - top - bot) * (1 - t / 4);
+    s += `<line x1="${l}" x2="${W - rgt}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${l - 6}" y="${y + 4}" font-size="11" text-anchor="end" fill="var(--muted)">${Math.round(v * 100)}%</text>`;
+  }
+  data.forEach((d, i) => {
+    const x = l + i * cw, h = isFinite(d.med) ? (d.med / maxV) * (H - top - bot) : 0, y = H - bot - h;
+    const label = d.b === Infinity ? `${d.a}+` : `${d.a}–${d.b}`;
+    s += `<rect x="${x + cw * 0.18}" y="${y}" width="${cw * 0.64}" height="${h}" fill="var(--served)" rx="2"><title>${label} km² per school: median ${pct(d.med)} across ${d.n} wards</title></rect>`;
+    if (isFinite(d.med)) s += `<text x="${x + cw / 2}" y="${y - 5}" font-size="11.5" text-anchor="middle">${pct(d.med)}</text>`;
+    s += `<text x="${x + cw / 2}" y="${H - bot + 16}" font-size="11.5" text-anchor="middle">${label}</text>`;
+    s += `<text x="${x + cw / 2}" y="${H - bot + 30}" font-size="10.5" text-anchor="middle" fill="var(--muted)">${d.n} wards</text>`;
+  });
+  // marker for current catchment area
+  const idx = bins.findIndex(([a, b]) => Ac >= a && Ac < b);
+  if (idx >= 0) {
+    const [a, b] = bins[idx];
+    const frac = b === Infinity ? 0.5 : (Ac - a) / (b - a);
+    const mx = l + idx * cw + cw * (0.18 + 0.64 * frac);
+    s += `<line x1="${mx}" x2="${mx}" y1="${top - 4}" y2="${H - bot}" stroke="var(--unserved)" stroke-width="2" stroke-dasharray="4 3"/>
+      <text x="${Math.min(mx + 5, W - 90)}" y="${top + 6}" font-size="11" fill="var(--unserved)">1 school ≈ ${Math.round(Ac)} km²</text>`;
+  }
+  s += `<text x="${(W + l) / 2}" y="${H - 4}" font-size="11.5" text-anchor="middle" fill="var(--muted)">Land area per secondary school (km²)</text></svg>`;
+  document.getElementById("calChart").innerHTML = s;
+
+  const valid = data.filter(d => d.n >= 15 && isFinite(d.med));
+  let note = "";
+  if (valid.length >= 2) {
+    const first = valid[0], last = valid[valid.length - 1];
+    const drop = first.med - last.med;
+    note = drop > 0.05
+      ? `Wards with the most land per school enroll about ${Math.round(drop * 100)} points fewer of their secondary-age residents than the most compact wards (${pct(last.med)} vs ${pct(first.med)}). Where the bars start falling is a hint at the real catchment size.`
+      : `Enrollment barely changes with land per school here (${pct(first.med)} to ${pct(last.med)}), which suggests distance isn’t the main constraint for these wards.`;
+  }
+  document.getElementById("calNote").textContent = note;
+}
+
+const COLS = [
+  { key: "ward", label: "Ward", get: r => r.ward, html: r => esc(r.ward) + (r.vsi ? `<span class="vsi" title="${esc(r.vsi)}">VSI</span>` : "") },
+  { key: "council", label: "Council, region", get: r => r.council, html: r => `${esc(r.council)}, ${esc(r.region)}` },
+  { key: "type", label: "Type", get: r => r.type, html: r => esc(r.type) },
+  { key: "P", label: "People", get: r => r.P, html: r => fmt(r.P) },
+  { key: "area", label: "km²", get: r => r.area, html: r => fmt(r.area) },
+  { key: "schools", label: "Schools (gov’t)", get: r => r.schools, html: r => `${r.schools} (${r.gov})` },
+  { key: "rate", label: "Enrolled", get: r => r.rate, html: r => r.demand ? pct(Math.min(r.rate, 9.99)) : "—" },
+  { key: "need", label: "Schools needed", get: r => r.need[state.lens], html: r => isFinite(r.need[state.lens]) ? r.need[state.lens] : "—" },
+  { key: "share", label: "Unserved share", get: r => r.shares[state.lens], html: r => `<span class="meter"><i style="width:${Math.round(r.shares[state.lens] * 100)}%"></i></span>${pct(r.shares[state.lens])}` },
+  { key: "unserved", label: "Unserved people", get: r => r.P * r.shares[state.lens], html: r => fmt(r.P * r.shares[state.lens]) }
+];
+
+function renderTable(rows, L) {
+  const qq = state.q.trim().toLowerCase();
+  let list = rows.filter(r => (!state.vsiOnly || r.vsi) && (!qq || (r.ward + " " + r.council + " " + r.vsi).toLowerCase().includes(qq)));
+  const col = COLS.find(c => c.key === state.sort.key) || COLS[COLS.length - 1];
+  list.sort((a, b) => {
+    const x = col.get(a), y = col.get(b);
+    return (typeof x === "string" ? x.localeCompare(y) : (x - y)) * state.sort.dir;
+  });
+  const total = list.length;
+  list = list.slice(0, 150);
+  document.getElementById("thead").innerHTML = COLS.map(c =>
+    `<th scope="col" data-key="${c.key}" tabindex="0" aria-sort="${c.key === state.sort.key ? (state.sort.dir < 0 ? "descending" : "ascending") : "none"}">${c.label}</th>`).join("");
+  document.getElementById("tbody").innerHTML = list.length
+    ? list.map(r => `<tr>${COLS.map(c => `<td>${c.html(r)}</td>`).join("")}</tr>`).join("")
+    : `<tr><td colspan="${COLS.length}" style="text-align:left;padding:18px">No wards match. Clear the search or turn on more ward types.</td></tr>`;
+  document.getElementById("tableNote").textContent = total > 150 ? `Showing the first 150 of ${total.toLocaleString("en-US")} wards. Search or select a region to narrow the list.` : `${total.toLocaleString("en-US")} wards.`;
+  document.querySelectorAll("#thead th").forEach(th => {
+    const go = () => { const k = th.dataset.key; state.sort = { key: k, dir: state.sort.key === k ? -state.sort.dir : (["ward", "council", "type"].includes(k) ? 1 : -1) }; render(); };
+    th.addEventListener("click", go);
+    th.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+  });
+  const chip = document.getElementById("regionChip");
+  chip.innerHTML = state.region ? `<span class="chip">${esc(state.region)} <button aria-label="Clear region filter">×</button></span>` : "";
+  const cb = chip.querySelector("button");
+  if (cb) cb.onclick = () => { state.region = ""; document.getElementById("region").value = ""; render(); };
+}
+
+/* ---------- controls ---------- */
+document.querySelectorAll(".lens button").forEach(b => b.addEventListener("click", () => {
+  state.lens = b.dataset.lens;
+  document.querySelectorAll(".lens button").forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+  if (WARDS.length) render();
+}));
+document.querySelectorAll("[data-type]").forEach(c => c.addEventListener("change", () => {
+  c.checked ? state.types.add(c.dataset.type) : state.types.delete(c.dataset.type);
+  if (!state.types.size) { c.checked = true; state.types.add(c.dataset.type); }
+  if (WARDS.length) render();
+}));
+const bind = (id, key, parse = Number, after) => document.getElementById(id).addEventListener("input", e => {
+  state[key] = e.target.type === "checkbox" ? e.target.checked : parse(e.target.value);
+  if (after) after();
+  if (WARDS.length) render();
+});
+bind("radius", "radius"); bind("seats", "seats"); bind("share", "share");
+bind("project", "project"); bind("pool", "pool"); bind("vsiOnly", "vsiOnly");
+bind("target", "target", Number, () => { targetTouched = true; });
+bind("q", "q", String);
+document.getElementById("region").addEventListener("change", e => { state.region = e.target.value; if (WARDS.length) render(); });
+
+loadFromSheet();
+</script>
+</body>
+</html>
