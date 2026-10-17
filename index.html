@@ -73,7 +73,7 @@ svg text{fill:var(--ink);font-family:"IBM Plex Sans",sans-serif}
 .tablehead h2{font-size:20px}
 .search{padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);min-width:220px}
 .tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px}
-table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:860px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:960px}
 th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
 th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}
 th{font-weight:600;color:var(--muted);background:var(--surface);cursor:pointer;user-select:none;position:sticky;top:0}
@@ -113,6 +113,7 @@ tr:last-child td{border-bottom:0}
         <button data-lens="capacity" aria-pressed="false">Capacity</button>
         <button data-lens="enrollment" aria-pressed="false">Enrollment</button>
         <button data-lens="combined" aria-pressed="false">Combined</button>
+        <button data-lens="notenrolled" aria-pressed="false" style="grid-column:1 / -1">Young people not enrolled</button>
       </div>
     </div>
 
@@ -123,6 +124,15 @@ tr:last-child td{border-bottom:0}
         <label><input type="checkbox" data-type="Mixed"> Mixed</label>
         <label><input type="checkbox" data-type="Urban"> Urban</label>
       </div>
+    </div>
+
+    <div class="ctl">
+      <label for="level">School level</label>
+      <select id="level">
+        <option value="o">Forms 1–4 (ages about 14–17)</option>
+        <option value="all">Forms 1–6 (ages about 14–19)</option>
+      </select>
+      <div class="hint">Sets which students count as enrolled and the age group they’re compared with.</div>
     </div>
 
     <div class="ctl">
@@ -148,8 +158,8 @@ tr:last-child td{border-bottom:0}
       </div>
       <div class="ctl">
         <div class="row"><label for="share">Secondary-age share</label><span class="val" id="shareVal"></span></div>
-        <input type="range" id="share" min="8" max="16" step="0.5" value="13">
-        <div class="hint">Share of residents aged roughly 14–19 (Forms 1–6). Use about 9% for Forms 1–4 only.</div>
+        <input type="range" id="share" min="6" max="16" step="0.5" value="9">
+        <div class="hint" id="shareHint"></div>
       </div>
       <div class="ctl">
         <label style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="checkbox" id="project" checked> Grow 2022 population to 2025 (3% a year)</label>
@@ -192,7 +202,7 @@ tr:last-child td{border-bottom:0}
       <div class="panels">
         <section class="panel">
           <h2>By region</h2>
-          <p class="hint">Unserved people under the current lens. Select a region to filter everything else.</p>
+          <p class="hint" id="regionHint">Unserved people under the current lens. Select a region to filter everything else.</p>
           <div class="chart" id="regionChart"></div>
         </section>
         <section class="panel">
@@ -246,6 +256,11 @@ const LENSES = {
     title: "Enrollment",
     note: "Uses what actually happened: 2025 enrollment against the secondary-age population. Wards below the benchmark rate count the shortfall as unserved. Students crossing ward lines blur this, so try pooling by council."
   },
+  notenrolled: {
+    name: "notenrolled",
+    title: "Not enrolled",
+    note: "Counts secondary-age young people, not all residents: the estimated age group minus the students actually enrolled in the ward’s schools. Some of them are still in primary school, in vocational training, or (for Forms 5–6) finished Form 4 and didn’t go on, so read it as “not in secondary school” rather than “dropped out.” Girls assume half the age group is female."
+  },
   combined: {
     name: "combined",
     title: "Combined",
@@ -255,7 +270,7 @@ const LENSES = {
 
 const state = {
   lens: "distance", types: new Set(["Rural"]), region: "", radius: 5, seats: 500,
-  share: 13, project: true, target: 60, pool: false, vsiOnly: false, q: "",
+  share: 9, level: "o", project: true, target: 60, pool: false, vsiOnly: false, q: "",
   sort: { key: "unserved", dir: -1 }
 };
 let WARDS = [];
@@ -284,7 +299,10 @@ function ingest(values) {
     WARDS.push({
       region: r[0], council: r[7] || r[1], ward: r[2], type: r[3] || "Rural",
       pop, area: num(r[5]), gov: num(r[9]), nongov: num(r[10]), schools: num(r[11]),
-      enrolled: num(r[12]), status, vsi: r[16] || ""
+      enrolled: num(r[12]), status, vsi: r[16] || "",
+      o: r.length > 17 && r[17] !== "" ? num(r[17]) : num(r[12]),
+      oGirls: r.length > 18 && r[18] !== "" ? num(r[18]) : NaN,
+      girls: r.length > 19 && r[19] !== "" ? num(r[19]) : NaN
     });
   }
   if (!WARDS.length) throw new Error("No mainland wards found. Check that the Wards tab still has its original columns.");
@@ -343,11 +361,13 @@ function model() {
   const s = state.share / 100, T = state.target / 100;
   const Ac = HEX * state.radius * state.radius;
   // council pools use every populated ward in the council (all types), since students cross ward lines
+  const enr = w => state.level === "o" ? w.o : w.enrolled;
+  const gEnr = w => state.level === "o" ? w.oGirls : w.girls;
   const pools = {};
   for (const w of WARDS) {
     const k = w.region + "|" + w.council;
-    const p = pools[k] || (pools[k] = { e: 0, d: 0 });
-    p.e += w.enrolled; p.d += w.pop * g * s;
+    const p = pools[k] || (pools[k] = { e: 0, d: 0, ge: 0 });
+    p.e += enr(w); p.ge += gEnr(w) || 0; p.d += w.pop * g * s;
   }
   const out = [];
   for (const w of WARDS) {
@@ -356,14 +376,21 @@ function model() {
     const needDist = Math.max(1, Math.ceil(w.area / Ac));
     const capShare = demand > 0 ? Math.max(0, 1 - (S * state.seats) / demand) : 0;
     const needCap = Math.max(1, Math.ceil(demand / state.seats));
-    const rate = demand > 0 ? w.enrolled / demand : 0;
+    const E = enr(w), GE = gEnr(w);
+    const rate = demand > 0 ? E / demand : 0;
     const pool = pools[w.region + "|" + w.council];
     const rateUsed = state.pool ? (pool.d > 0 ? pool.e / pool.d : 0) : rate;
     const enrShare = Math.max(0, 1 - rateUsed / T);
     const combShare = Math.max(distShare, capShare);
-    const shares = { distance: distShare, capacity: capShare, enrollment: enrShare, combined: combShare };
-    const need = { distance: needDist, capacity: needCap, combined: Math.max(needDist, needCap), enrollment: NaN };
-    out.push({ ...w, P, demand, rate, distShare, capShare, enrShare, combShare, shares, need,
+    const notShare = Math.max(0, 1 - Math.min(rateUsed, 1));
+    const girlDemand = demand / 2;
+    const girlsRateUsed = state.pool ? (pool.d > 0 ? pool.ge / (pool.d / 2) : 0) : (girlDemand > 0 ? GE / girlDemand : 0);
+    const girlsNot = isFinite(GE) ? girlDemand * Math.max(0, 1 - Math.min(girlsRateUsed, 1)) : NaN;
+    const shares = { distance: distShare, capacity: capShare, enrollment: enrShare, combined: combShare, notenrolled: notShare };
+    const need = { distance: needDist, capacity: needCap, combined: Math.max(needDist, needCap), enrollment: NaN, notenrolled: NaN };
+    const base = { distance: P, capacity: P, enrollment: P, combined: P, notenrolled: demand };
+    const amt = {}; for (const l in shares) amt[l] = base[l] * shares[l];
+    out.push({ ...w, P, demand, rate, distShare, capShare, enrShare, combShare, shares, need, base, amt, girlsNot, E,
       kmPerSchool: S > 0 ? w.area / S : Infinity });
   }
   return { rows: out, Ac };
@@ -385,11 +412,14 @@ function render() {
   document.getElementById("radiusHint").textContent = `One school covers about ${Math.round(Ac)} km² at this radius (roughly ${Math.round(state.radius * 12)} minutes’ walk each way at 5 km/h).`;
   document.getElementById("seatsVal").textContent = state.seats;
   document.getElementById("shareVal").textContent = state.share + "%";
+  document.getElementById("shareHint").textContent = state.level === "o"
+    ? "Share of residents aged roughly 14–17, the Forms 1–4 age group. About 9% is typical."
+    : "Share of residents aged roughly 14–19, the Forms 1–6 age group. About 13% is typical.";
 
   // benchmark: set once from what well-served wards in scope achieve
   const rates = scope.filter(r => r.schools > 0 && r.demand > 0).map(r => Math.min(r.rate, 2)).sort((a, b) => a - b);
   const q = p => rates.length ? rates[Math.floor(p * (rates.length - 1))] : NaN;
-  const totE = scope.reduce((a, r) => a + r.enrolled, 0), totD = scope.reduce((a, r) => a + r.demand, 0);
+  const totE = scope.reduce((a, r) => a + r.E, 0), totD = scope.reduce((a, r) => a + r.demand, 0);
   if (!targetInit && rates.length) {
     targetInit = true;
     state.target = Math.min(100, Math.max(20, Math.round(q(0.75) * 100)));
@@ -401,29 +431,48 @@ function render() {
 
   // totals
   const sum = (arr, f) => arr.reduce((a, r) => a + f(r), 0);
-  const P = sum(scope, r => r.P);
-  const un = l => sum(scope, r => r.P * r.shares[l]);
+  const P = sum(scope, r => r.base[L]);
+  const un = l => sum(scope, r => r.amt[l]);
   const U = un(L);
+  const NE = L === "notenrolled";
   const affected = scope.filter(r => r.shares[L] >= 0.25).length;
-  const gap = L === "enrollment" ? NaN : sum(scope, r => Math.max(0, r.need[L] - r.schools));
+  const gap = (L === "enrollment" || NE) ? NaN : sum(scope, r => Math.max(0, r.need[L] - r.schools));
   const zero = scope.filter(r => r.schools === 0).length;
   const types = [...state.types].map(t => t.toLowerCase());
   const typeTxt = types.length === 3 ? "all wards" : types.join(" and ") + " wards";
   const where = state.region ? ` in ${state.region}` : " on the mainland";
 
-  document.getElementById("headline").textContent =
-    `About ${fmt(U)} of the ${fmt(P)} people in ${typeTxt}${where} are not served under the ${LENSES[L].title.toLowerCase()} lens.`;
+  const levelTxt = state.level === "o" ? "Forms 1–4" : "Forms 1–6";
   const ests = ["distance", "capacity", "enrollment"].map(l => ({ l, v: un(l) })).sort((a, b) => a.v - b.v);
-  document.getElementById("subline").textContent =
-    `That’s ${pct(P ? U / P : NaN)} of residents. Across the three lenses the estimate runs from ${fmt(ests[0].v)} (${ests[0].l}) to ${fmt(ests[2].v)} (${ests[2].l}), so the honest answer is a range rather than one number.`;
+  const GN = sum(scope, r => isFinite(r.girlsNot) ? r.girlsNot : 0);
+  const girlsKnown = scope.some(r => isFinite(r.girlsNot));
+  if (NE) {
+    document.getElementById("headline").textContent =
+      `About ${fmt(U)} of the ${fmt(P)} young people of ${levelTxt} age in ${typeTxt}${where} aren’t enrolled in secondary school.`;
+    document.getElementById("subline").textContent =
+      `That’s ${pct(P ? U / P : NaN)} of the age group, based on a ${state.share}% age share.` +
+      (girlsKnown ? ` Roughly ${fmt(GN)} of them are girls, or ${pct(P ? GN / (P / 2) : NaN)} of girls that age.` : "") +
+      ` Ward figures blur where students cross ward lines; pooling by council smooths that out.`;
+  } else {
+    document.getElementById("headline").textContent =
+      `About ${fmt(U)} of the ${fmt(P)} people in ${typeTxt}${where} are not served under the ${LENSES[L].title.toLowerCase()} lens.`;
+    document.getElementById("subline").textContent =
+      `That’s ${pct(P ? U / P : NaN)} of residents. Across the three lenses the estimate runs from ${fmt(ests[0].v)} (${ests[0].l}) to ${fmt(ests[2].v)} (${ests[2].l}), so the honest answer is a range rather than one number.`;
+  }
   document.getElementById("lensnote").textContent = LENSES[L].note;
 
-  document.getElementById("stats").innerHTML = [
+  const half = scope.filter(r => r.shares.notenrolled >= 0.5).length;
+  document.getElementById("stats").innerHTML = (NE ? [
+    [scope.length.toLocaleString("en-US"), "wards in scope"],
+    [pct(totD ? Math.min(totE / totD, 1) : NaN), `of ${levelTxt}-age young people enrolled`],
+    [girlsKnown ? fmt(GN) : "—", "girls not enrolled"],
+    [half.toLocaleString("en-US"), "wards where half or more aren’t enrolled"]
+  ] : [
     [scope.length.toLocaleString("en-US"), "wards in scope"],
     [zero.toLocaleString("en-US"), "with no secondary school"],
     [affected.toLocaleString("en-US"), "with a quarter or more unserved"],
     [isFinite(gap) ? fmt(gap) : "—", L === "enrollment" ? "extra schools (not estimated by this lens)" : "extra schools implied"]
-  ].map(([b, s]) => `<div><b>${b}</b><span>${s}</span></div>`).join("");
+  ]).map(([b, s]) => `<div><b>${b}</b><span>${s}</span></div>`).join("");
 
   renderRegions(scopeAll, L);
   renderCalibration(scope, Ac);
@@ -434,7 +483,7 @@ function renderRegions(rows, L) {
   const by = {};
   for (const r of rows) {
     const o = by[r.region] || (by[r.region] = { P: 0, U: 0 });
-    o.P += r.P; o.U += r.P * r.shares[L];
+    o.P += r.base[L]; o.U += r.amt[L];
   }
   const data = Object.entries(by).map(([k, v]) => ({ k, ...v })).sort((a, b) => b.U - a.U);
   const max = Math.max(...data.map(d => d.P), 1);
@@ -451,6 +500,9 @@ function renderRegions(rows, L) {
     </g>`;
   });
   s += `</svg>`;
+  document.getElementById("regionHint").textContent = L === "notenrolled"
+    ? "Young people not enrolled, against the whole age group. Select a region to filter everything else."
+    : "Unserved people under the current lens. Select a region to filter everything else.";
   const el = document.getElementById("regionChart");
   el.innerHTML = s;
   el.querySelectorAll(".reg-row").forEach(g => {
@@ -510,13 +562,14 @@ const COLS = [
   { key: "ward", label: "Ward", get: r => r.ward, html: r => esc(r.ward) + (r.vsi ? `<span class="vsi" title="${esc(r.vsi)}">VSI</span>` : "") },
   { key: "council", label: "Council, region", get: r => r.council, html: r => `${esc(r.council)}, ${esc(r.region)}` },
   { key: "type", label: "Type", get: r => r.type, html: r => esc(r.type) },
-  { key: "P", label: "People", get: r => r.P, html: r => fmt(r.P) },
+  { key: "P", label: () => state.lens === "notenrolled" ? "Secondary-age" : "People", get: r => r.base[state.lens], html: r => fmt(r.base[state.lens]) },
   { key: "area", label: "km²", get: r => r.area, html: r => fmt(r.area) },
   { key: "schools", label: "Schools (gov’t)", get: r => r.schools, html: r => `${r.schools} (${r.gov})` },
   { key: "rate", label: "Enrolled", get: r => r.rate, html: r => r.demand ? pct(Math.min(r.rate, 9.99)) : "—" },
   { key: "need", label: "Schools needed", get: r => r.need[state.lens], html: r => isFinite(r.need[state.lens]) ? r.need[state.lens] : "—" },
-  { key: "share", label: "Unserved share", get: r => r.shares[state.lens], html: r => `<span class="meter"><i style="width:${Math.round(r.shares[state.lens] * 100)}%"></i></span>${pct(r.shares[state.lens])}` },
-  { key: "unserved", label: "Unserved people", get: r => r.P * r.shares[state.lens], html: r => fmt(r.P * r.shares[state.lens]) }
+  { key: "share", label: () => state.lens === "notenrolled" ? "Share not enrolled" : "Unserved share", get: r => r.shares[state.lens], html: r => `<span class="meter"><i style="width:${Math.round(r.shares[state.lens] * 100)}%"></i></span>${pct(r.shares[state.lens])}` },
+  { key: "unserved", label: () => state.lens === "notenrolled" ? "Not enrolled" : "Unserved people", get: r => r.amt[state.lens], html: r => fmt(r.amt[state.lens]) },
+  { key: "girls", label: "Girls not enrolled", get: r => isFinite(r.girlsNot) ? r.girlsNot : -1, html: r => isFinite(r.girlsNot) ? fmt(r.girlsNot) : "—" }
 ];
 
 function renderTable(rows, L) {
@@ -530,7 +583,7 @@ function renderTable(rows, L) {
   const total = list.length;
   list = list.slice(0, 150);
   document.getElementById("thead").innerHTML = COLS.map(c =>
-    `<th scope="col" data-key="${c.key}" tabindex="0" aria-sort="${c.key === state.sort.key ? (state.sort.dir < 0 ? "descending" : "ascending") : "none"}">${c.label}</th>`).join("");
+    `<th scope="col" data-key="${c.key}" tabindex="0" aria-sort="${c.key === state.sort.key ? (state.sort.dir < 0 ? "descending" : "ascending") : "none"}">${typeof c.label === "function" ? c.label() : c.label}</th>`).join("");
   document.getElementById("tbody").innerHTML = list.length
     ? list.map(r => `<tr>${COLS.map(c => `<td>${c.html(r)}</td>`).join("")}</tr>`).join("")
     : `<tr><td colspan="${COLS.length}" style="text-align:left;padding:18px">No wards match. Clear the search or turn on more ward types.</td></tr>`;
@@ -566,6 +619,13 @@ bind("radius", "radius"); bind("seats", "seats"); bind("share", "share");
 bind("project", "project"); bind("pool", "pool"); bind("vsiOnly", "vsiOnly");
 bind("target", "target", Number, () => { targetTouched = true; });
 bind("q", "q", String);
+document.getElementById("level").addEventListener("change", e => {
+  state.level = e.target.value;
+  state.share = state.level === "o" ? 9 : 13;
+  document.getElementById("share").value = state.share;
+  if (!targetTouched) targetInit = false;
+  if (WARDS.length) render();
+});
 document.getElementById("region").addEventListener("change", e => { state.region = e.target.value; if (WARDS.length) render(); });
 
 loadFromSheet();
