@@ -147,6 +147,16 @@ tr:last-child td{border-bottom:0}
         <input type="range" id="radius" min="2" max="10" step="0.5" value="5">
         <div class="hint" id="radiusHint"></div>
       </div>
+      <div class="ctl">
+        <div class="row"><label for="settled">People per km² of lived-in land</label><span class="val" id="settledVal"></span></div>
+        <input type="range" id="settled" min="0" max="200" step="10" value="50">
+        <div class="hint" id="settledHint"></div>
+      </div>
+      <div class="ctl">
+        <div class="row"><label for="minSchool">Smallest workable school</label><span class="val" id="minSchoolVal"></span></div>
+        <input type="range" id="minSchool" min="80" max="400" step="20" value="160">
+        <div class="hint">Students needed to keep a school open. One stream across Forms 1–4 at 40 per class is 160. Distance never calls for more schools than the ward’s young people could fill.</div>
+      </div>
     </div>
 
     <div class="group">
@@ -244,7 +254,7 @@ const LENSES = {
   distance: {
     name: "distance",
     title: "Distance",
-    note: "Each school covers a walking catchment. Whatever part of a ward falls outside every catchment counts as unserved, assuming people are spread evenly across the ward. In reality people cluster in villages near roads and schools, so this is an upper bound."
+    note: "Each school covers a walking catchment. Whatever part of a ward’s lived-in land falls outside every catchment counts as unserved. In sparse wards, people are treated as living on a smaller area at the density you set, because they cluster in villages rather than spreading across empty land. Where reaching everyone would take more schools than the ward’s young people could fill, the ward is flagged as a boarding candidate instead."
   },
   capacity: {
     name: "capacity",
@@ -270,7 +280,7 @@ const LENSES = {
 
 const state = {
   lens: "distance", types: new Set(["Rural"]), region: "", radius: 5, seats: 500,
-  share: 9, level: "o", project: true, target: 60, pool: false, vsiOnly: false, q: "",
+  share: 9, level: "o", settled: 50, minSchool: 160, project: true, target: 60, pool: false, vsiOnly: false, q: "",
   sort: { key: "unserved", dir: -1 }
 };
 let WARDS = [];
@@ -372,8 +382,13 @@ function model() {
   const out = [];
   for (const w of WARDS) {
     const P = w.pop * g, demand = P * s, S = w.schools;
-    const distShare = w.area > 0 ? Math.max(0, 1 - Math.min(w.area, S * Ac) / w.area) : 0;
-    const needDist = Math.max(1, Math.ceil(w.area / Ac));
+    // people cluster: in sparse wards, treat them as living on a smaller "lived-in" area at the chosen density
+    const lived = state.settled > 0 ? Math.min(w.area, P / state.settled) : w.area;
+    const distShare = lived > 0 ? Math.max(0, 1 - Math.min(lived, S * Ac) / lived) : 0;
+    const needDistRaw = Math.max(1, Math.ceil(lived / Ac));
+    const maxViable = Math.max(1, Math.floor(demand / state.minSchool));
+    const needDist = Math.min(needDistRaw, maxViable);
+    const boarding = needDistRaw > maxViable && needDist <= S;
     const capShare = demand > 0 ? Math.max(0, 1 - (S * state.seats) / demand) : 0;
     const needCap = Math.max(1, Math.ceil(demand / state.seats));
     const E = enr(w), GE = gEnr(w);
@@ -387,10 +402,10 @@ function model() {
     const girlsRateUsed = state.pool ? (pool.d > 0 ? pool.ge / (pool.d / 2) : 0) : (girlDemand > 0 ? GE / girlDemand : 0);
     const girlsNot = isFinite(GE) ? girlDemand * Math.max(0, 1 - Math.min(girlsRateUsed, 1)) : NaN;
     const shares = { distance: distShare, capacity: capShare, enrollment: enrShare, combined: combShare, notenrolled: notShare };
-    const need = { distance: needDist, capacity: needCap, combined: Math.max(needDist, needCap), enrollment: NaN, notenrolled: NaN };
+    const need = { distance: needDist, capacity: needCap, combined: Math.max(needDist, needCap), enrollment: needCap, notenrolled: needCap };
     const base = { distance: P, capacity: P, enrollment: P, combined: P, notenrolled: demand };
     const amt = {}; for (const l in shares) amt[l] = base[l] * shares[l];
-    out.push({ ...w, P, demand, rate, distShare, capShare, enrShare, combShare, shares, need, base, amt, girlsNot, E,
+    out.push({ ...w, P, demand, rate, lived, boarding, needDistRaw, distShare, capShare, enrShare, combShare, shares, need, base, amt, girlsNot, E,
       kmPerSchool: S > 0 ? w.area / S : Infinity });
   }
   return { rows: out, Ac };
@@ -411,6 +426,11 @@ function render() {
   document.getElementById("radiusVal").textContent = state.radius + " km";
   document.getElementById("radiusHint").textContent = `One school covers about ${Math.round(Ac)} km² at this radius (roughly ${Math.round(state.radius * 12)} minutes’ walk each way at 5 km/h).`;
   document.getElementById("seatsVal").textContent = state.seats;
+  document.getElementById("settledVal").textContent = state.settled ? state.settled : "Off";
+  document.getElementById("settledHint").textContent = state.settled
+    ? `Wards sparser than ${state.settled} people per km² are treated as if everyone lived on just enough land to reach that density. Set to Off to assume people are spread evenly.`
+    : "Off: people are assumed to be spread evenly across each ward, which overstates distance in sparse wards.";
+  document.getElementById("minSchoolVal").textContent = state.minSchool;
   document.getElementById("shareVal").textContent = state.share + "%";
   document.getElementById("shareHint").textContent = state.level === "o"
     ? "Share of residents aged roughly 14–17, the Forms 1–4 age group. About 9% is typical."
@@ -436,7 +456,7 @@ function render() {
   const U = un(L);
   const NE = L === "notenrolled";
   const affected = scope.filter(r => r.shares[L] >= 0.25).length;
-  const gap = (L === "enrollment" || NE) ? NaN : sum(scope, r => Math.max(0, r.need[L] - r.schools));
+  const gap = sum(scope, r => Math.max(0, r.need[L] - r.schools));
   const zero = scope.filter(r => r.schools === 0).length;
   const types = [...state.types].map(t => t.toLowerCase());
   const typeTxt = types.length === 3 ? "all wards" : types.join(" and ") + " wards";
@@ -462,6 +482,7 @@ function render() {
   document.getElementById("lensnote").textContent = LENSES[L].note;
 
   const half = scope.filter(r => r.shares.notenrolled >= 0.5).length;
+  const boardingN = scope.filter(r => r.boarding && r.distShare > 0).length;
   document.getElementById("stats").innerHTML = (NE ? [
     [scope.length.toLocaleString("en-US"), "wards in scope"],
     [pct(totD ? Math.min(totE / totD, 1) : NaN), `of ${levelTxt}-age young people enrolled`],
@@ -471,7 +492,8 @@ function render() {
     [scope.length.toLocaleString("en-US"), "wards in scope"],
     [zero.toLocaleString("en-US"), "with no secondary school"],
     [affected.toLocaleString("en-US"), "with a quarter or more unserved"],
-    [isFinite(gap) ? fmt(gap) : "—", L === "enrollment" ? "extra schools (not estimated by this lens)" : "extra schools implied"]
+    ...((L === "distance" || L === "combined") ? [[boardingN.toLocaleString("en-US"), "where boarding beats building"]] : []),
+    [isFinite(gap) ? fmt(gap) : "—", L === "enrollment" ? "extra schools to seat the whole age group" : "extra schools implied"]
   ]).map(([b, s]) => `<div><b>${b}</b><span>${s}</span></div>`).join("");
 
   renderRegions(scopeAll, L);
@@ -566,7 +588,7 @@ const COLS = [
   { key: "area", label: "km²", get: r => r.area, html: r => fmt(r.area) },
   { key: "schools", label: "Schools (gov’t)", get: r => r.schools, html: r => `${r.schools} (${r.gov})` },
   { key: "rate", label: "Enrolled", get: r => r.rate, html: r => r.demand ? pct(Math.min(r.rate, 9.99)) : "—" },
-  { key: "need", label: "Schools needed", get: r => r.need[state.lens], html: r => isFinite(r.need[state.lens]) ? r.need[state.lens] : "—" },
+  { key: "need", label: () => ["enrollment", "notenrolled"].includes(state.lens) ? "Schools to seat all" : "Schools needed", get: r => r.need[state.lens], html: r => (isFinite(r.need[state.lens]) ? r.need[state.lens] : "—") + ((state.lens === "distance" || state.lens === "combined") && r.boarding && r.distShare > 0 ? `<span class="vsi" style="background:var(--unserved-soft);color:var(--ink)" title="Reaching everyone would take ${r.needDistRaw} schools, more than the ward’s young people could fill. Boarding or hostels make more sense than new schools.">boarding</span>` : "") },
   { key: "share", label: () => state.lens === "notenrolled" ? "Share not enrolled" : "Unserved share", get: r => r.shares[state.lens], html: r => `<span class="meter"><i style="width:${Math.round(r.shares[state.lens] * 100)}%"></i></span>${pct(r.shares[state.lens])}` },
   { key: "unserved", label: () => state.lens === "notenrolled" ? "Not enrolled" : "Unserved people", get: r => r.amt[state.lens], html: r => fmt(r.amt[state.lens]) },
   { key: "girls", label: "Girls not enrolled", get: r => isFinite(r.girlsNot) ? r.girlsNot : -1, html: r => isFinite(r.girlsNot) ? fmt(r.girlsNot) : "—" }
@@ -615,7 +637,7 @@ const bind = (id, key, parse = Number, after) => document.getElementById(id).add
   if (after) after();
   if (WARDS.length) render();
 });
-bind("radius", "radius"); bind("seats", "seats"); bind("share", "share");
+bind("radius", "radius"); bind("settled", "settled"); bind("minSchool", "minSchool"); bind("seats", "seats"); bind("share", "share");
 bind("project", "project"); bind("pool", "pool"); bind("vsiOnly", "vsiOnly");
 bind("target", "target", Number, () => { targetTouched = true; });
 bind("q", "q", String);
